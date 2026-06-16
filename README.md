@@ -55,11 +55,13 @@ pip install -e .
 
 **Linux (Debian/Ubuntu):**
 ```bash
-sudo apt install rtl-sdr librtlsdr-dev libportaudio2
+sudo apt install rtl-sdr librtlsdr-dev libportaudio2 make python3.14-venv pulseaudio
 git clone <this repo> && cd oscope-me
-python3 -m venv .venv && source .venv/bin/activate
-pip install -e .
+make venv
+make run
 ```
+
+Use `alsamixer` to control volume.
 
 On Linux you may need a udev rule so the SDR is usable without root, and to
 blacklist the DVB-T kernel driver:
