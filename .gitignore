@@ -1,2 +1,4 @@
 oscope_me/__pycache__/**
 oscope_me/__pycache__
+.venv
+tests/__pycache__
