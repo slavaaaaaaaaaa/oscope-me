@@ -55,7 +55,7 @@ pip install -e .
 
 **Linux (Debian/Ubuntu):**
 ```bash
-sudo apt install rtl-sdr librtlsdr-dev libportaudio2 make python3.14-venv pulseaudio
+sudo apt install rtl-sdr librtlsdr-dev libportaudio2 make python3.14-venv pulseaudio ffmpeg
 git clone <this repo> && cd oscope-me
 make venv
 make run
