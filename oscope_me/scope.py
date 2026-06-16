@@ -17,6 +17,8 @@ _DOT = np.array([[0x01, 0x08],
                  [0x04, 0x20],
                  [0x40, 0x80]], dtype=np.uint8)
 
+_BRAILLE_CHARS = np.array([chr(0x2800 + i) for i in range(256)])
+
 GREEN = "\x1b[38;5;46m"
 DIM = "\x1b[2m"
 RESET = "\x1b[0m"
@@ -29,8 +31,9 @@ ALT_SCREEN_OFF = "\x1b[?1049l"
 
 
 class BrailleScope:
-    def __init__(self, history=8192):
+    def __init__(self, history=8192, max_npoints=2400):
         self.history = history
+        self.max_npoints = max_npoints
         self.bufL = np.zeros(history, dtype=np.float32)
         self.bufR = np.zeros(history, dtype=np.float32)
         self.pos = 0
@@ -70,9 +73,10 @@ class BrailleScope:
             return self.bufL[idx].copy(), self.bufR[idx].copy()
 
     def render(self, cols, rows, npoints=2400, status_top="", status_bottom=""):
-        left, right = self._snapshot(npoints)
         dot_cols = cols * 2
         dot_rows = rows * 4
+        npoints = min(npoints, self.max_npoints, dot_cols * dot_rows * 2)
+        left, right = self._snapshot(npoints)
         grid = np.zeros((rows, cols), dtype=np.uint8)
 
         if len(left):
@@ -88,11 +92,7 @@ class BrailleScope:
             bits = _DOT[py % 4, px % 2]
             np.bitwise_or.at(grid, (cy, cx), bits)
 
-        base = np.uint16(0x2800)
-        lines = []
-        for r in range(rows):
-            row = grid[r].astype(np.uint16) + base
-            lines.append("".join(map(chr, row.tolist())))
+        lines = ["".join(_BRAILLE_CHARS[row]) for row in grid]
 
         out = [HOME]
         if status_top:

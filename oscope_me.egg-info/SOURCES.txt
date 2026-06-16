@@ -19,4 +19,5 @@ oscope_me.egg-info/requires.txt
 oscope_me.egg-info/top_level.txt
 tests/test_dsp.py
 tests/test_rates.py
+tests/test_scope.py
 tests/test_streaming.py

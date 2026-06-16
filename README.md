@@ -8,14 +8,6 @@ flip options live from the keyboard.
 
 ![Terminal vectorscope](screenshot.png)
 
-```
-  oscope-me  102.5 MHz | SDR 1.200M -> MPX 240k -> audio 48.0k | de-emph 75us
-                          ⢀⣴⠾⠛⠉⠉⠛⠷⣦⡀
-                       ⢀⣴⠟⠁          ⠉⠻⣦⡀
-                      ⡾⠋                ⠙⢷
-   STEREO ●  out: External Headphones  underruns: 0   (Ctrl-C to quit)
-```
-
 ## How it works
 
 Oscilloscope music is **stereo** audio: the Left channel drives the scope's
@@ -141,7 +133,23 @@ Start with the scope's X and Y gains roughly equal, then trim to taste.
 | `--mono` | Force mono — collapses the X/Y image to a diagonal line. |
 | `-p, --ppm` | Tuner frequency correction in ppm. |
 | `--no-scope` | Skip the terminal preview (audio only). |
+| `--low-power` | Reduce CPU: lower FPS, smaller buffers, lower SDR rate. |
 | `--volume` | Output level multiplier. |
+
+## Slow computers
+
+The terminal scope redraw and SDR decode can be heavy on older laptops. Try:
+
+```bash
+oscope-me --low-power 100.1
+oscope-me --fps 15 --sample-rate 960000 100.1
+oscope-me --no-scope 100.1
+oscope-me --low-power --audio-buffer 2.0 100.1
+```
+
+`--low-power` lowers scope FPS to 15, picks a 960 kHz SDR rate, uses a smaller
+scope buffer, and reads the SDR in larger blocks. `--no-scope` skips the Braille
+preview entirely (audio only). Increase `--audio-buffer` if you hear crackling.
 
 ## Troubleshooting
 

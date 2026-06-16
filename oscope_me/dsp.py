@@ -50,7 +50,7 @@ def choose_rates(fs_audio: int, fs_in_override: int | None = None,
     best = None
     for d1 in range(1, 16):
         cand = fs_mpx * d1
-        if 1_000_000 <= cand <= 2_500_000:
+        if 900_000 <= cand <= 2_500_000:
             score = abs(cand - target_fs_in)
             if best is None or score < best[0]:
                 best = (score, d1, cand)

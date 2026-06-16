@@ -46,6 +46,9 @@ def build_parser():
                    help="Audio ring-buffer size in seconds (default 1.0).")
     p.add_argument("--fps", type=float, default=40.0,
                    help="Scope redraw rate (default 40).")
+    p.add_argument("--low-power", action="store_true",
+                   help="Reduce CPU use: lower scope FPS, smaller buffers, "
+                        "lower SDR sample rate.")
     p.add_argument("--no-scope", action="store_true",
                    help="Audio only; skip the terminal X/Y preview.")
     p.add_argument("--list-audio", action="store_true",
@@ -66,6 +69,7 @@ def _parse_deemphasis(value):
 
 def main(argv=None):
     args = build_parser().parse_args(argv)
+    fps_explicit = "--fps" in (argv if argv is not None else sys.argv)
 
     if args.list_audio:
         from .audio import list_devices
@@ -101,6 +105,8 @@ def main(argv=None):
         audio_device=audio_device,
         audio_buffer=args.audio_buffer,
         fps=args.fps,
+        fps_explicit=fps_explicit,
+        low_power=args.low_power,
         no_scope=args.no_scope,
     )
 

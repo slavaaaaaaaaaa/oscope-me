@@ -48,5 +48,11 @@ def test_override_rejects_non_multiple():
         choose_rates(48_000, fs_in_override=fs_mpx + 1)
 
 
+def test_target_fs_in_prefers_lower_rate():
+    fs_in, _, d1, _ = choose_rates(48_000, target_fs_in=960_000)
+    assert fs_in == 960_000
+    assert d1 >= 1
+
+
 if __name__ == "__main__":
     raise SystemExit(pytest.main([__file__, "-v"]))

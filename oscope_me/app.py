@@ -70,6 +70,19 @@ def _mmss(seconds):
     return f"{seconds // 60}:{seconds % 60:02d}"
 
 
+def _apply_low_power(cfg):
+    if cfg.low_power and not cfg.fps_explicit:
+        cfg.fps = 15
+    cfg.target_fs_in = 960_000 if cfg.low_power else 1_200_000
+    if cfg.low_power:
+        cfg.scope_history = 4096
+        cfg.scope_max_npoints = 1200
+    else:
+        cfg.scope_history = 8192
+        cfg.scope_max_npoints = 2400
+    cfg.sdr_block_seconds = 0.2 if cfg.low_power else 0.1
+
+
 # --------------------------------------------------------------------------- #
 # Session: one running source + (optional) demod feeding audio/scope.
 # --------------------------------------------------------------------------- #
@@ -89,12 +102,13 @@ class _Session:
     def start(self):
         cfg = self.cfg
         if cfg.mode == "sdr":
-            fs_in, fs_mpx, d1, d2 = choose_rates(cfg.audio_rate, cfg.sample_rate)
+            fs_in, fs_mpx, d1, d2 = choose_rates(cfg.audio_rate, cfg.sample_rate,
+                                                  target_fs_in=cfg.target_fs_in)
             self.demod = FmStereoDemod(fs_in, fs_mpx, d1, d2, cfg.audio_rate,
                                        deemphasis_us=cfg.deemphasis,
                                        stereo=not cfg.mono, volume=cfg.volume)
             self.source = RtlSdrSource(int(cfg.freq * 1e6), fs_in, gain=cfg.gain,
-                                       ppm=cfg.ppm, block_seconds=0.1,
+                                       ppm=cfg.ppm, block_seconds=cfg.sdr_block_seconds,
                                        device_index=cfg.device_index)
         else:
             self.demod = None
@@ -289,7 +303,7 @@ def _open_sdr(cfg, keys):
 # Rendering.
 # --------------------------------------------------------------------------- #
 
-def _status_lines(cfg, session, audio, waiting_sdr, status_msg):
+def _status_lines(cfg, session, audio, waiting_sdr, status_msg, skipped_frames=0):
     if cfg.mode == "sdr":
         deemph = f"{cfg.deemphasis}us" if cfg.deemphasis else "off"
         top = (f"  oscope-me  {cfg.freq:.1f} MHz | "
@@ -323,6 +337,8 @@ def _status_lines(cfg, session, audio, waiting_sdr, status_msg):
 
     if status_msg:
         bottom = f"  » {status_msg}"
+    if skipped_frames > 0:
+        bottom += f"  skipped: {skipped_frames}"
     bottom += "   (? help, q quit)"
     return top, bottom
 
@@ -363,8 +379,9 @@ def _help_frame(cfg, cols, rows):
 
 
 def _draw(cfg, scope, session, audio, out, using_scope, waiting_sdr,
-          show_help, status_msg):
-    top, bottom = _status_lines(cfg, session, audio, waiting_sdr, status_msg)
+          show_help, status_msg, skipped_frames=0):
+    top, bottom = _status_lines(cfg, session, audio, waiting_sdr, status_msg,
+                                skipped_frames)
     if using_scope:
         cols, rows = _term_size()
         if show_help:
@@ -400,6 +417,7 @@ def _engine(cfg, audio, scope, keys):
     status_msg = ""
     last_render = 0.0
     last_devcheck = 0.0
+    skipped_frames = 0
 
     def teardown():
         nonlocal session
@@ -440,9 +458,18 @@ def _engine(cfg, audio, scope, keys):
                 # SDR unplug (or transient): leave session None to re-arm.
 
             if now - last_render >= frame:
-                last_render = now
+                overdue = int((now - last_render) / frame) - 1
+                if overdue > 0:
+                    skipped_frames += overdue
+                t0 = time.monotonic()
                 _draw(cfg, scope, session, audio, out, using_scope,
-                      waiting_sdr, show_help, status_msg)
+                      waiting_sdr, show_help, status_msg, skipped_frames)
+                render_elapsed = time.monotonic() - t0
+                if render_elapsed > frame:
+                    skipped_frames += int(render_elapsed / frame) - 1
+                    last_render = time.monotonic()
+                else:
+                    last_render = now
 
             key = keys.get_key(timeout=frame) if interactive else None
             if key is None:
@@ -475,6 +502,8 @@ def _engine(cfg, audio, scope, keys):
 
 
 def run(cfg):
+    _apply_low_power(cfg)
+
     # Runtime state added onto the static config.
     cfg.muted = False
     cfg.paused = False
@@ -496,7 +525,8 @@ def run(cfg):
     # Validate / precompute SDR rates up front (also used in the status bar).
     try:
         cfg._fs_in, cfg._fs_mpx, _, _ = choose_rates(cfg.audio_rate,
-                                                     cfg.sample_rate)
+                                                     cfg.sample_rate,
+                                                     target_fs_in=cfg.target_fs_in)
     except ValueError as e:
         print(str(e), file=sys.stderr)
         return 2
@@ -511,7 +541,9 @@ def run(cfg):
     audio.start()
     try:
         with KeyReader() as keys:
-            return _engine(cfg, audio, scope_mod.BrailleScope()
+            return _engine(cfg, audio,
+                           scope_mod.BrailleScope(history=cfg.scope_history,
+                                                  max_npoints=cfg.scope_max_npoints)
                            if not cfg.no_scope else None, keys)
     finally:
         audio.stop()
