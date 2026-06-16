@@ -9,6 +9,9 @@ dependencies = [
     "sounddevice>=0.4",
 ]
 
+[project.optional-dependencies]
+test = ["pytest>=7"]
+
 [project.scripts]
 oscope-me = "oscope_me.cli:main"
 oscope = "oscope_me.cli:main"
