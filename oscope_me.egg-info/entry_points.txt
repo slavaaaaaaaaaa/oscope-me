@@ -1,0 +1,3 @@
+[console_scripts]
+oscope = oscope_me.cli:main
+oscope-me = oscope_me.cli:main

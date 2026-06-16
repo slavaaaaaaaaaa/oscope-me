@@ -1,0 +1,8 @@
+Metadata-Version: 2.4
+Name: oscope-me
+Version: 0.1.0
+Summary: Tune an FM stereo broadcast with an RTL-SDR and play it as X/Y oscilloscope music
+Requires-Python: >=3.10
+Requires-Dist: numpy>=1.24
+Requires-Dist: scipy>=1.10
+Requires-Dist: sounddevice>=0.4
