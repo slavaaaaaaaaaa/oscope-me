@@ -1,7 +1,13 @@
 VENV := .venv
 PYTHON := $(VENV)/bin/python
 
-.PHONY: run play test
+.PHONY: venv run play test
+
+venv:
+	$(PYTHON) -m venv .venv
+	$(PYTHON) -m pip install --upgrade pip
+	$(PYTHON) -m pip install -e .
+	pulseaudio --start
 
 run:  ## Start the app (waits for SDR, prompts for frequency)
 	$(PYTHON) -m oscope_me $(ARGS)
