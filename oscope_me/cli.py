@@ -34,8 +34,8 @@ def build_parser():
     p.add_argument("--deemphasis", default="75",
                    help="De-emphasis time constant: 75 (Americas), 50 (Europe), "
                         "or off (default 75).")
-    p.add_argument("--volume", type=float, default=1.0,
-                   help="Output level multiplier (default 1.0).")
+    p.add_argument("--volume", type=float, default=0.2,
+                   help="Output level multiplier (default 0.2).")
     p.add_argument("--mono", action="store_true",
                    help="Force mono decode (collapses the X/Y image to a line).")
     p.add_argument("--device-index", type=int, default=0,
