@@ -53,7 +53,12 @@ make venv
 make run
 ```
 
-Use `alsamixer` to control volume.
+`make run` and `make play` automatically disable ALSA **Auto-Mute Mode** on Linux
+so the headphone jack (scope) and built-in speakers (monitor) can play together.
+Override the sound card if needed: `make run ALSA_CARD=1`.
+
+Use `alsamixer` to control volume. To persist auto-mute disabled across reboots:
+`sudo alsactl store` (after disabling Auto-Mute Mode manually once).
 
 On Linux you may need a udev rule so the SDR is usable without root, and to
 blacklist the DVB-T kernel driver:
@@ -136,6 +141,38 @@ Start with the scope's X and Y gains roughly equal, then trim to taste.
 | `--no-scope` | Skip the terminal preview (audio only). |
 | `--low-power` | Reduce CPU: lower FPS, smaller buffers, lower SDR rate. |
 | `--volume` | Output level multiplier (default 0.02). |
+| `--dual-analog` | Linux: disable ALSA auto-mute (done automatically by `make run`/`make play`). |
+| `--monitor-device` | Second output device when speaker and headphone are separate sinks. |
+
+## Ubuntu: scope on jack, monitor on speakers
+
+On Ubuntu laptops, plugging in headphones usually mutes the built-in speakers
+(ALSA auto-mute). For oscilloscope use you want **both**: jack → scope X/Y,
+speakers → audio monitor.
+
+**Single command (recommended):**
+
+```bash
+make run                  # SDR — dual analog enabled on Linux
+make play FILE=song.flac  # file mode
+```
+
+**Direct CLI** (without make):
+
+```bash
+oscope-me -f 102.5 --dual-analog
+```
+
+**Separate speaker/headphone sinks** (USB speakers, some desktops):
+
+```bash
+make run ARGS='--monitor-device "Built-in Audio Analog Stereo"'
+oscope-me --list-audio    # list device names
+```
+
+If auto-mute keeps re-enabling after reboot, run `alsamixer` → F6 pick card →
+disable **Auto-Mute Mode** → unmute **Speaker** → `sudo alsactl store`. Wrong
+card index: `make run ALSA_CARD=1`.
 
 ## Slow computers
 
@@ -166,6 +203,9 @@ preview entirely (audio only). Increase `--audio-buffer` if you hear crackling.
   *before* starting, or restart after plugging in — the output device is opened
   once at launch. Also check `alsamixer` (Headphone channel not muted) and press
   `+` a few times (default volume is very low).
+- **Speakers silent with headphones plugged in (Linux)** — use `make run` / `make play`
+  (disables ALSA auto-mute), or `oscope-me --dual-analog`. See
+  [Ubuntu: scope on jack, monitor on speakers](#ubuntu-scope-on-jack-monitor-on-speakers).
 
 ## Tests
 

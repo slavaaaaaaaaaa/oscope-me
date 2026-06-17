@@ -573,7 +573,9 @@ def run(cfg):
                     if sys.stdin.isatty() else cfg.default_freq)
 
     audio = AudioOutput(samplerate=cfg.audio_rate, device=cfg.audio_device,
-                        buffer_seconds=cfg.audio_buffer)
+                        buffer_seconds=cfg.audio_buffer,
+                        monitor_device=getattr(cfg, "monitor_device", None),
+                        dual_analog=getattr(cfg, "dual_analog", False))
     audio.start()
     try:
         with KeyReader() as keys:

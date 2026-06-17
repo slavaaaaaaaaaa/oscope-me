@@ -42,6 +42,12 @@ def build_parser():
                    help="RTL-SDR device index (default 0).")
     p.add_argument("--audio-device", default=None,
                    help="Output device name or index (default: system default).")
+    p.add_argument("--monitor-device", default=None,
+                   help="Second output device for monitoring (Linux: when speaker "
+                        "and headphone are separate sinks).")
+    p.add_argument("--dual-analog", action="store_true",
+                   help="Linux: disable ALSA auto-mute so jack and speakers play "
+                        "together (make run/play does this automatically).")
     p.add_argument("--audio-buffer", type=float, default=1.0, metavar="SEC",
                    help="Audio ring-buffer size in seconds (default 1.0).")
     p.add_argument("--fps", type=float, default=40.0,
@@ -54,6 +60,15 @@ def build_parser():
     p.add_argument("--list-audio", action="store_true",
                    help="List audio output devices and exit.")
     return p
+
+
+def _parse_audio_device(value):
+    if value is None:
+        return None
+    try:
+        return int(value)
+    except ValueError:
+        return value
 
 
 def _parse_deemphasis(value):
@@ -76,12 +91,8 @@ def main(argv=None):
         print(list_devices())
         return 0
 
-    audio_device = args.audio_device
-    if audio_device is not None:
-        try:
-            audio_device = int(audio_device)
-        except ValueError:
-            pass
+    audio_device = _parse_audio_device(args.audio_device)
+    monitor_device = _parse_audio_device(args.monitor_device)
 
     input_file = None
     if args.input is not None:
@@ -103,6 +114,8 @@ def main(argv=None):
         mono=args.mono,
         device_index=args.device_index,
         audio_device=audio_device,
+        monitor_device=monitor_device,
+        dual_analog=args.dual_analog,
         audio_buffer=args.audio_buffer,
         fps=args.fps,
         fps_explicit=fps_explicit,
