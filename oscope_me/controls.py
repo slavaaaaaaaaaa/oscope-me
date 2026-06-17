@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import select
 import sys
+import time
 
 try:
     import termios
@@ -25,6 +26,31 @@ _ESC_MAP = {
     "[5~": "pageup", "[6~": "pagedown",
     "OA": "up", "OB": "down", "OC": "right", "OD": "left",
 }
+
+# Max wait for the rest of an escape sequence after ESC (macOS can be slow).
+_ESC_DEADLINE = 0.05
+
+
+def _parse_escape(seq: str) -> str:
+    """Map a terminal escape suffix to a key name."""
+    if not seq:
+        return "esc"
+    if seq in _ESC_MAP:
+        return _ESC_MAP[seq]
+    # CSI with numeric / modifier prefixes: [1;2A, [27;5;53~, etc.
+    if seq.startswith("["):
+        last = seq[-1]
+        if last in "ABCD":
+            return _ESC_MAP["[" + last]
+        if seq.endswith("~"):
+            if seq.startswith("[5"):
+                return "pageup"
+            if seq.startswith("[6"):
+                return "pagedown"
+    # SS3 application cursor keys: OA, OB, ...
+    if seq.startswith("O") and len(seq) == 2 and seq[1] in "ABCD":
+        return _ESC_MAP[seq]
+    return "esc"
 
 VOLUME_KEYS = frozenset({"+", "=", "-", "_"})
 
@@ -98,16 +124,20 @@ class KeyReader:
         ch = self.stream.read(1)
         if ch != "\x1b":
             return ch
-        # Escape sequence (arrow / page keys); grab the rest if it's there.
+        # Escape sequence (arrow / page keys); wait for the full sequence.
         seq = ""
-        while True:
-            r, _, _ = select.select([self.fd], [], [], 0.0008)
+        deadline = time.monotonic() + _ESC_DEADLINE
+        while time.monotonic() < deadline:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                break
+            r, _, _ = select.select([self.fd], [], [], remaining)
             if not r:
                 break
             seq += self.stream.read(1)
-            if seq[-1].isalpha() or seq[-1] == "~":
+            if seq and (seq[-1].isalpha() or seq[-1] == "~"):
                 break
-        return _ESC_MAP.get(seq, "esc")
+        return _parse_escape(seq)
 
     def read_line(self, prompt):
         """Drop to cooked mode, read a full line with echo, then restore.

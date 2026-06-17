@@ -112,6 +112,33 @@ def _output_rms(demod, iq_block):
     return left, rms
 
 
+def test_agc_snaps_at_startup_not_loud_ramp():
+    fs_audio = 48_000
+    fs_in, fs_mpx, d1, d2 = choose_rates(fs_audio)
+
+    n = int(fs_audio * 0.5)
+    t = np.arange(n) / fs_audio
+    left = 0.6 * np.sin(2 * np.pi * 700 * t)
+    right = 0.6 * np.sin(2 * np.pi * 1500 * t)
+    iq = make_fm_stereo_iq(left, right, fs_audio, fs_in)
+
+    demod = FmStereoDemod(fs_in, fs_mpx, d1, d2, fs_audio, deemphasis_us=0,
+                          volume=0.02)
+    step = fs_in // 10
+    rms_readings = []
+    for i in range(0, len(iq), step):
+        _, rms = _output_rms(demod, iq[i:i + step])
+        if rms > 1e-6:
+            rms_readings.append(rms)
+        if len(rms_readings) >= 5:
+            break
+
+    assert demod._agc_ready
+    assert demod.agc_gain < 1.0, f"startup gain should not stay at 1.0, got {demod.agc_gain}"
+    # First audible block should already be near steady level, not a huge spike.
+    assert rms_readings[0] < rms_readings[-1] * 3.0
+
+
 if __name__ == "__main__":
     test_stereo_separation()
     print("OK")

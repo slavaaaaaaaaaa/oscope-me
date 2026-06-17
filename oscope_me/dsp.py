@@ -180,8 +180,9 @@ class FmStereoDemod:
 
         # Equal-gain AGC: scales L and R by the SAME factor so the picture's
         # shape is preserved while the level stays sane for the DAC / scope.
-        self.agc_gain = 1.0
+        self.agc_gain = 0.0
         self.agc_target = 0.25 * float(volume)
+        self._agc_ready = False
 
     def set_volume(self, volume):
         """Change the output level on the fly (instant; AGC keeps tracking after)."""
@@ -229,8 +230,13 @@ class FmStereoDemod:
 
         level = float(np.sqrt(np.mean(left * left + right * right) + 1e-9))
         desired = self.agc_target / (level + 1e-9)
-        self.agc_gain += 0.05 * (desired - self.agc_gain)
-        self.agc_gain = float(np.clip(self.agc_gain, 0.0, 50.0))
+        if not self._agc_ready:
+            if level > 1e-6:
+                self.agc_gain = float(np.clip(desired, 0.0, 50.0))
+                self._agc_ready = True
+        else:
+            self.agc_gain += 0.05 * (desired - self.agc_gain)
+            self.agc_gain = float(np.clip(self.agc_gain, 0.0, 50.0))
         left = left * self.agc_gain
         right = right * self.agc_gain
 

@@ -135,7 +135,7 @@ Start with the scope's X and Y gains roughly equal, then trim to taste.
 | `-p, --ppm` | Tuner frequency correction in ppm. |
 | `--no-scope` | Skip the terminal preview (audio only). |
 | `--low-power` | Reduce CPU: lower FPS, smaller buffers, lower SDR rate. |
-| `--volume` | Output level multiplier. |
+| `--volume` | Output level multiplier (default 0.02). |
 
 ## Slow computers
 
