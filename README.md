@@ -160,6 +160,12 @@ preview entirely (audio only). Increase `--audio-buffer` if you hear crackling.
 - **`mono ○` instead of `STEREO ●`** — the station has no 19 kHz pilot or the
   signal is weak. Try a stronger station, a better antenna, or set `-g` manually.
 - **Crackling / `underruns` climbing** — increase `--audio-buffer` (e.g. `2.0`).
+- **No sound on headphones (Linux)** — check the status bar `out:` line; if it
+  shows a raw `hw:…` device, try `oscope-me --audio-device pulse` (or
+  `--list-audio` and pick the PulseAudio/PipeWire entry). Plug headphones in
+  *before* starting, or restart after plugging in — the output device is opened
+  once at launch. Also check `alsamixer` (Headphone channel not muted) and press
+  `+` a few times (default volume is very low).
 
 ## Tests
 

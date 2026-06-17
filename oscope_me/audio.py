@@ -1,23 +1,49 @@
 """Stereo audio output via PortAudio (sounddevice) with a thread-safe ring buffer.
 
-We send to the system default output device by default, so plugging in
-headphones (or a USB DAC wired to the scope) routes the X/Y signal there
-automatically. Left channel -> scope X, Right channel -> scope Y.
+Left channel -> scope X, Right channel -> scope Y.
+
+On macOS the system default follows headphone hot-plug. On Linux, PortAudio often
+opens a raw ALSA PCM device that does not; when no --audio-device is given we
+prefer routing through PulseAudio/PipeWire so jack switching works.
 """
 
 from __future__ import annotations
 
+import sys
 import threading
 import time
 
 import numpy as np
 import sounddevice as sd
 
+# Substrings matched against PortAudio output device names (case-insensitive).
+_LINUX_OUTPUT_PREFER = ("pulse", "pipewire", "default")
+
+
+def resolve_output_device(device):
+    """Return the PortAudio device argument to use for playback."""
+    if device is not None:
+        return device
+    if sys.platform != "linux":
+        return None
+    try:
+        devices = sd.query_devices()
+    except Exception:
+        return None
+    for prefer in _LINUX_OUTPUT_PREFER:
+        for dev in devices:
+            if dev.get("max_output_channels", 0) < 1:
+                continue
+            if prefer in dev["name"].lower():
+                return prefer
+    return None
+
 
 class AudioOutput:
     def __init__(self, samplerate=48_000, device=None, channels=2,
                  buffer_seconds=0.5):
         self.samplerate = int(samplerate)
+        self.device = resolve_output_device(device)
         self.channels = channels
         self.N = max(1, int(self.samplerate * buffer_seconds))
         self.buf = np.zeros((self.N, channels), dtype=np.float32)
@@ -32,7 +58,7 @@ class AudioOutput:
         self.primed = False
         self.stream = sd.OutputStream(
             samplerate=self.samplerate, channels=channels, dtype="float32",
-            device=device, callback=self._callback)
+            device=self.device, callback=self._callback)
 
     @property
     def device_name(self):
