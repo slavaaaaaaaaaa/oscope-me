@@ -6,6 +6,9 @@ from unittest.mock import MagicMock
 import numpy as np
 import pytest
 
+# sounddevice loads PortAudio at import time; stub it so CI needs no system libs.
+sys.modules["sounddevice"] = MagicMock()
+
 import oscope_me.audio as audio
 
 
