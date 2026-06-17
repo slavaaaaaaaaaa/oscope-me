@@ -23,14 +23,10 @@ jobs:
           cache: pip
 
       - name: Install
-        # The DSP tests only need numpy/scipy/pytest; no audio device or SDR
-        # hardware is touched, so this runs on a plain CI runner. Install the
-        # package itself with --no-deps so `import oscope_me` works without
-        # pulling in sounddevice (and its PortAudio system dependency).
+        # No SDR or audio hardware is touched; audio tests mock PortAudio I/O.
         run: |
           python -m pip install --upgrade pip
-          pip install numpy scipy pytest
-          pip install -e . --no-deps
+          pip install -e ".[test]"
 
       - name: Run tests
         run: pytest tests/ -v
