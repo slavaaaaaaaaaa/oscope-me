@@ -194,6 +194,11 @@ class AudioOutput:
         return f"{primary} + {self._monitor.device_name}"
 
     @property
+    def N(self):
+        """Ring-buffer capacity in frames (paced against the primary stream)."""
+        return self._primary.N
+
+    @property
     def underruns(self):
         total = self._primary.underruns
         if self._monitor is not None:
