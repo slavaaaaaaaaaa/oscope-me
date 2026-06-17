@@ -17,7 +17,10 @@ oscope_me.egg-info/dependency_links.txt
 oscope_me.egg-info/entry_points.txt
 oscope_me.egg-info/requires.txt
 oscope_me.egg-info/top_level.txt
+tests/test_audio.py
+tests/test_controls.py
 tests/test_dsp.py
+tests/test_file_source.py
 tests/test_rates.py
 tests/test_scope.py
 tests/test_streaming.py
