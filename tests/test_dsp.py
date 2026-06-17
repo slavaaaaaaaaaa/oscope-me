@@ -81,6 +81,37 @@ def test_stereo_separation():
     assert sep_L > 18 and sep_R > 18, "poor stereo separation"
 
 
+def test_set_volume_changes_level_immediately():
+    fs_audio = 48_000
+    fs_in, fs_mpx, d1, d2 = choose_rates(fs_audio)
+
+    dur = 1.0
+    n = int(fs_audio * dur)
+    t = np.arange(n) / fs_audio
+    left = 0.6 * np.sin(2 * np.pi * 700 * t)
+    right = 0.6 * np.sin(2 * np.pi * 1500 * t)
+    iq = make_fm_stereo_iq(left, right, fs_audio, fs_in)
+
+    demod = FmStereoDemod(fs_in, fs_mpx, d1, d2, fs_audio, deemphasis_us=0,
+                          volume=1.0)
+    step = fs_in // 10
+    for i in range(0, len(iq), step):
+        demod.process(iq[i:i + step])
+
+    _, rms_before = _output_rms(demod, iq[-step:])
+    demod.set_volume(0.5)
+    _, rms_after = _output_rms(demod, iq[-step:])
+
+    ratio = rms_after / (rms_before + 1e-12)
+    assert 0.40 < ratio < 0.60, f"expected ~0.5x level, got {ratio:.3f}"
+
+
+def _output_rms(demod, iq_block):
+    left, right = demod.process(iq_block)
+    rms = float(np.sqrt(np.mean(left * left + right * right)))
+    return left, rms
+
+
 if __name__ == "__main__":
     test_stereo_separation()
     print("OK")

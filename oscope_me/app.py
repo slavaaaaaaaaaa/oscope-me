@@ -21,7 +21,7 @@ import time
 
 from . import scope as scope_mod
 from .audio import AudioOutput
-from .controls import KeyReader
+from .controls import KeyReader, RepeatFilter
 from .dsp import FmStereoDemod, choose_rates
 from .file_source import FileSource, ffmpeg_available
 from .file_source import install_hint as ffmpeg_hint
@@ -113,7 +113,8 @@ class _Session:
         else:
             self.demod = None
             self.source = FileSource(cfg.input_file, cfg.audio_rate,
-                                     loop=cfg.loop)
+                                     loop=cfg.loop,
+                                     start_offset_seconds=cfg.file_offset_seconds)
         self.audio.reset()
         cfg.frames_played = 0
         self._stop.clear()
@@ -180,6 +181,11 @@ class _Session:
 # Key handling.
 # --------------------------------------------------------------------------- #
 
+# Volume step per +/- keypress.
+_VOLUME_STEP = 0.02
+_FILE_SEEK_STEP = 10.0
+
+
 def _handle_key(key, cfg, keys, session):
     """Return (action, message). action: None | 'restart' | 'quit'."""
     if key in ("q",):
@@ -187,19 +193,19 @@ def _handle_key(key, cfg, keys, session):
 
     # Volume / mute work in any mode, without a restart.
     if key in ("+", "="):
-        cfg.volume = round(min(8.0, cfg.volume + 0.1), 2)
+        cfg.volume = round(min(8.0, cfg.volume + _VOLUME_STEP), 2)
         if session:
             session.apply_volume()
-        return None, f"volume {cfg.volume:.1f}"
+        return None, f"volume {cfg.volume:.2f}"
     if key == "_" or key == "-":
-        cfg.volume = round(max(0.0, cfg.volume - 0.1), 2)
+        cfg.volume = round(max(0.0, cfg.volume - _VOLUME_STEP), 2)
         if session:
             session.apply_volume()
-        return None, f"volume {cfg.volume:.1f}"
+        return None, f"volume {cfg.volume:.2f}"
 
     if cfg.mode == "sdr":
         return _handle_sdr_key(key, cfg, keys)
-    return _handle_file_key(key, cfg, keys)
+    return _handle_file_key(key, cfg, keys, session)
 
 
 def _handle_sdr_key(key, cfg, keys):
@@ -255,7 +261,31 @@ def _handle_sdr_key(key, cfg, keys):
     return None, ""
 
 
-def _handle_file_key(key, cfg, keys):
+def _file_position(cfg):
+    return cfg.file_offset_seconds + cfg.frames_played / cfg.audio_rate
+
+
+def _seek_file(cfg, session, delta):
+    current = _file_position(cfg)
+    dur = session.source.duration if (session and session.source) else None
+    if dur:
+        new_pos = current + delta
+        if cfg.loop:
+            new_pos = new_pos % dur
+        else:
+            new_pos = max(0.0, min(dur, new_pos))
+    else:
+        new_pos = max(0.0, current + delta)
+    cfg.file_offset_seconds = new_pos
+    cfg.paused = False
+    return "restart", f"seek {_mmss(new_pos)}"
+
+
+def _handle_file_key(key, cfg, keys, session):
+    if key in ("left", "<"):
+        return _seek_file(cfg, session, -_FILE_SEEK_STEP)
+    if key in ("right", ">"):
+        return _seek_file(cfg, session, _FILE_SEEK_STEP)
     if key == " ":
         cfg.paused = not cfg.paused
         return None, "paused" if cfg.paused else "playing"
@@ -264,6 +294,7 @@ def _handle_file_key(key, cfg, keys):
         return "restart", "loop on" if cfg.loop else "loop off"
     if key == "r":
         cfg.paused = False
+        cfg.file_offset_seconds = 0.0
         return "restart", "restarted"
     if key == "o":
         return _open_file(cfg, keys)
@@ -284,6 +315,7 @@ def _open_file(cfg, keys):
     cfg.input_file = path
     cfg.mode = "file"
     cfg.paused = False
+    cfg.file_offset_seconds = 0.0
     return "restart", f"playing {os.path.basename(path)}"
 
 
@@ -320,7 +352,7 @@ def _status_lines(cfg, session, audio, waiting_sdr, status_msg, skipped_frames=0
     else:
         name = os.path.basename(cfg.input_file) if cfg.input_file else "(no file)"
         top = f"  oscope-me  ♪ {name} | audio {cfg.audio_rate / 1e3:.1f}k"
-        elapsed = cfg.frames_played / cfg.audio_rate
+        elapsed = _file_position(cfg)
         dur = session.source.duration if (session and session.source) else None
         if dur:
             pos = elapsed % dur if cfg.loop else min(elapsed, dur)
@@ -344,7 +376,7 @@ def _status_lines(cfg, session, audio, waiting_sdr, status_msg, skipped_frames=0
 
 
 def _vol(cfg):
-    return f"vol {cfg.volume:.1f}" + ("  MUTED" if cfg.muted else "")
+    return f"vol {cfg.volume:.2f}" + ("  MUTED" if cfg.muted else "")
 
 
 def _help_frame(cfg, cols, rows):
@@ -366,6 +398,7 @@ def _help_frame(cfg, cols, rows):
     else:
         mode = [
             "  space      pause / resume      r          restart from start",
+            "  ← / >      seek −10 s / +10 s",
             "  l          loop on / off       o          open another file",
             "  f          switch to SDR tuning",
         ]
@@ -418,6 +451,7 @@ def _engine(cfg, audio, scope, keys):
     last_render = 0.0
     last_devcheck = 0.0
     skipped_frames = 0
+    vol_filter = RepeatFilter()
 
     def teardown():
         nonlocal session
@@ -472,6 +506,7 @@ def _engine(cfg, audio, scope, keys):
                     last_render = now
 
             key = keys.get_key(timeout=frame) if interactive else None
+            key = vol_filter.filter(key, now)
             if key is None:
                 if not interactive:
                     time.sleep(frame)
@@ -509,6 +544,7 @@ def run(cfg):
     cfg.paused = False
     cfg.finished = False
     cfg.frames_played = 0
+    cfg.file_offset_seconds = 0.0
 
     if cfg.mode == "file":
         if not ffmpeg_available():

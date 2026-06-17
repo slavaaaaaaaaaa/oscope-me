@@ -57,16 +57,19 @@ class FileSource:
     demodulated audio: each is a (left, right) tuple of float32 arrays.
     """
 
-    def __init__(self, path, fs, block_seconds=0.05, loop=True):
+    def __init__(self, path, fs, block_seconds=0.05, loop=True,
+                 start_offset_seconds=0.0):
         self.path = str(path)
         self.fs = int(fs)
         self.loop = bool(loop)
+        self.start_offset_seconds = float(start_offset_seconds)
         self.block = max(1, int(self.fs * block_seconds))  # frames per block
         self.nbytes = self.block * 2 * 4                   # 2 ch * float32
         self.duration = probe_duration(self.path)
         self.proc = None
         self.stderr_tail: list[str] = []
         self._stderr_thread = None
+        self.last_cmd: list[str] | None = None
 
     def start(self):
         if not os.path.exists(self.path):
@@ -74,9 +77,12 @@ class FileSource:
         cmd = ["ffmpeg", "-hide_banner", "-nostdin", "-loglevel", "error"]
         if self.loop:
             cmd += ["-stream_loop", "-1"]      # loop the input forever
+        if self.start_offset_seconds > 0:
+            cmd += ["-ss", str(self.start_offset_seconds)]
         cmd += ["-i", self.path,
                 "-f", "f32le", "-acodec", "pcm_f32le",
                 "-ac", "2", "-ar", str(self.fs), "-"]
+        self.last_cmd = cmd
         self.proc = subprocess.Popen(cmd, stdout=subprocess.PIPE,
                                      stderr=subprocess.PIPE, bufsize=0)
         self._stderr_thread = threading.Thread(target=self._drain_stderr,

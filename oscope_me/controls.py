@@ -26,6 +26,32 @@ _ESC_MAP = {
     "OA": "up", "OB": "down", "OC": "right", "OD": "left",
 }
 
+VOLUME_KEYS = frozenset({"+", "=", "-", "_"})
+
+
+class RepeatFilter:
+    """Drop OS key-repeat for keys that should act once per physical press."""
+
+    def __init__(self, keys=VOLUME_KEYS, release_gap=0.15):
+        self._keys = keys
+        self._release_gap = release_gap
+        self._held_key = None
+        self._held_since = 0.0
+
+    def filter(self, key, now):
+        if self._held_key is not None and (now - self._held_since) > self._release_gap:
+            self._held_key = None
+        if key is None:
+            return None
+        if key in self._keys:
+            if key == self._held_key:
+                return None
+            self._held_key = key
+            self._held_since = now
+            return key
+        self._held_key = None
+        return key
+
 
 class KeyReader:
     def __init__(self, stream=None):

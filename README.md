@@ -102,6 +102,7 @@ The app is interactive — press keys while it's running:
 | `o` | switch to playing a file |
 | **File mode** | |
 | `space` | pause / resume |
+| `→` / `←` (or `>` / `<`) | seek ∓10 s |
 | `r` | restart from the beginning |
 | `l` | loop on / off |
 | `o` | open another file |

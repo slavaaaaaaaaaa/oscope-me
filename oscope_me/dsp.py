@@ -184,8 +184,11 @@ class FmStereoDemod:
         self.agc_target = 0.25 * float(volume)
 
     def set_volume(self, volume):
-        """Change the output level on the fly (the AGC ramps to the new target)."""
-        self.agc_target = 0.25 * float(volume)
+        """Change the output level on the fly (instant; AGC keeps tracking after)."""
+        new_target = 0.25 * float(volume)
+        if self.agc_target > 1e-12:
+            self.agc_gain *= new_target / self.agc_target
+        self.agc_target = new_target
 
     def process(self, iq):
         base = self.iq_decim(iq)        # complex @ fs_mpx
