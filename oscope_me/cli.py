@@ -20,9 +20,9 @@ def build_parser():
     p.add_argument("--no-loop", dest="loop", action="store_false",
                    help="Play the input file once, then stop.")
     p.add_argument("-f", "--freq", type=float, default=None, metavar="MHz",
-                   help="FM frequency in MHz. If omitted, you'll be prompted.")
+                   help="FM frequency in MHz (default: --default-freq, 100.1).")
     p.add_argument("--default-freq", type=float, default=100.1, metavar="MHz",
-                   help="Default offered at the frequency prompt (default 100.1).")
+                   help="Starting FM frequency when -f is omitted (default 100.1).")
     p.add_argument("-g", "--gain", default="auto", metavar="dB",
                    help="Tuner gain in dB, or 'auto' (default).")
     p.add_argument("-p", "--ppm", type=int, default=0,

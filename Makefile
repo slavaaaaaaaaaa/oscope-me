@@ -17,7 +17,7 @@ setup-dual-analog:  ## Linux: disable ALSA auto-mute so jack + speakers play tog
 	  amixer -c $(ALSA_CARD) sset Speaker unmute >/dev/null 2>&1 || true; \
 	fi
 
-run: setup-dual-analog  ## Start the app (waits for SDR, prompts for frequency)
+run: setup-dual-analog  ## Start the app (waits for SDR, tunes to default frequency)
 	$(PYTHON) -m oscope_me $(ARGS)
 
 play: setup-dual-analog  ## Play a file as X/Y music: make play FILE=song.flac

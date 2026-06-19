@@ -87,7 +87,7 @@ airspyhf_info                          # should list the receiver
 ## Usage
 
 ```bash
-oscope-me                 # waits for SDR, then prompts for a frequency
+oscope-me                 # waits for SDR, tunes to 100.1 MHz
 oscope-me -f 102.5        # tune 102.5 MHz directly
 oscope-me -i song.flac    # play a file (flac/mp3/wav/ogg/m4a/...) instead
 oscope-me -i song.wav --no-loop   # play once instead of looping
@@ -99,8 +99,8 @@ oscope-me -f 102.5 --sdr-backend airspyhf   # force Airspy HF+
 oscope-me -f 102.5 --sdr-backend rtl        # force RTL-SDR
 ```
 
-In **SDR mode** it waits for a supported receiver (Airspy HF or RTL-SDR), asks
-for a frequency (or uses `--default-freq`), then streams. Airspy HF uses a fixed
+In **SDR mode** it waits for a supported receiver (Airspy HF or RTL-SDR), tunes
+to `--default-freq` (100.1 MHz by default), then streams. Airspy HF uses a fixed
 768 kS/s IQ rate; FM tuning (88–108 MHz) is within its 60–260 MHz VHF range.
 Use `--audio-rate 48000` or `96000` with Airspy HF (44100 Hz is not compatible
 with the fixed 768 kS/s decimation plan). In **file mode** (`-i FILE`) it decodes the file with ffmpeg and plays it straight
@@ -154,7 +154,8 @@ Start with the scope's X and Y gains roughly equal, then trim to taste.
 |------|---------|
 | `-i, --input FILE` | Play an audio file instead of the SDR (needs ffmpeg). |
 | `--loop` / `--no-loop` | Loop the file forever (default) or play once. |
-| `-f, --freq MHz` | FM frequency. Omit to be prompted. |
+| `-f, --freq MHz` | FM frequency (default: `--default-freq`, 100.1). |
+| `--default-freq MHz` | Starting frequency when `-f` is omitted (default 100.1). |
 | `-g, --gain dB` | Tuner gain, or `auto` (default). |
 | `--audio-rate Hz` | Output sample rate: 48000 (default), 96000, 192000. |
 | `--deemphasis` | `75` (Americas, default), `50` (Europe), or `off`. |

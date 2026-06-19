@@ -34,26 +34,6 @@ def _term_size():
     return max(20, sz.columns), max(10, sz.lines)
 
 
-def prompt_frequency(default_mhz):
-    while True:
-        try:
-            raw = input(f"FM frequency in MHz [{default_mhz}]: ").strip()
-        except EOFError:
-            return float(default_mhz)
-        if not raw:
-            return float(default_mhz)
-        raw = raw.lower().replace("mhz", "").strip()
-        try:
-            f = float(raw)
-        except ValueError:
-            print("  please enter a number like 100.1")
-            continue
-        if f < 80 or f > 110:
-            print("  that's outside the 88-108 MHz FM band; try again")
-            continue
-        return f
-
-
 def _parse_freq(s):
     if s is None:
         return None
@@ -637,10 +617,8 @@ def run(cfg):
             print(str(e), file=sys.stderr)
             return 2
 
-    # Ask for a starting frequency if we're on the SDR and weren't told one.
     if cfg.mode == "sdr" and cfg.freq is None:
-        cfg.freq = (prompt_frequency(cfg.default_freq)
-                    if sys.stdin.isatty() else cfg.default_freq)
+        cfg.freq = cfg.default_freq
 
     audio = AudioOutput(samplerate=cfg.audio_rate, device=cfg.audio_device,
                         buffer_seconds=cfg.audio_buffer,
