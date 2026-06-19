@@ -40,6 +40,9 @@ def build_parser():
                    help="Force mono decode (collapses the X/Y image to a line).")
     p.add_argument("--device-index", type=int, default=0,
                    help="RTL-SDR device index (default 0).")
+    p.add_argument("--sdr-backend", default="auto", choices=("auto", "rtl", "airspyhf"),
+                   help="SDR backend: auto (prefer Airspy HF, else RTL-SDR), "
+                        "rtl, or airspyhf (default auto).")
     p.add_argument("--audio-device", default=None,
                    help="Output device name or index (default: system default).")
     p.add_argument("--monitor-device", default=None,
@@ -113,6 +116,7 @@ def main(argv=None):
         volume=args.volume,
         mono=args.mono,
         device_index=args.device_index,
+        sdr_backend=args.sdr_backend,
         audio_device=audio_device,
         monitor_device=monitor_device,
         dual_analog=args.dual_analog,

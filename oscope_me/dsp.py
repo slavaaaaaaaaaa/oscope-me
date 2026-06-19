@@ -61,6 +61,20 @@ def choose_rates(fs_audio: int, fs_in_override: int | None = None,
     return fs_in, fs_mpx, d1, d2
 
 
+def choose_rates_airspyhf(fs_audio: int):
+    """Rate plan for Airspy HF+ at the fixed 768 kS/s IQ rate."""
+    fs_in = 768_000
+    min_m = int(np.ceil(220_000 / fs_audio))
+    for m in range(min_m, 64):
+        fs_mpx = m * fs_audio
+        if fs_in % fs_mpx == 0:
+            d1 = fs_in // fs_mpx
+            return fs_in, fs_mpx, d1, m
+    raise ValueError(
+        f"No integer decimation plan for Airspy HF at fs_in={fs_in} "
+        f"with audio rate {fs_audio} Hz")
+
+
 class _FIR:
     """FIR filter that carries its delay line across blocks."""
 

@@ -5,7 +5,7 @@ streaming chain depends on. These are pure arithmetic, no hardware or audio.
 import numpy as np
 import pytest
 
-from oscope_me.dsp import choose_rates
+from oscope_me.dsp import choose_rates, choose_rates_airspyhf
 
 
 @pytest.mark.parametrize("fs_audio", [44_100, 48_000, 96_000])
@@ -52,6 +52,36 @@ def test_target_fs_in_prefers_lower_rate():
     fs_in, _, d1, _ = choose_rates(48_000, target_fs_in=960_000)
     assert fs_in == 960_000
     assert d1 >= 1
+
+
+@pytest.mark.parametrize("fs_audio", [48_000, 96_000])
+def test_airspyhf_rate_plan_is_integer_decimation(fs_audio):
+    fs_in, fs_mpx, d1, d2 = choose_rates_airspyhf(fs_audio)
+
+    assert fs_in == 768_000
+    assert fs_mpx == fs_audio * d2
+    assert fs_in == fs_mpx * d1
+    assert fs_in % fs_mpx == 0
+    assert fs_mpx % fs_audio == 0
+
+
+@pytest.mark.parametrize("fs_audio", [48_000])
+def test_airspyhf_mpx_is_wide_enough(fs_audio):
+    _, fs_mpx, _, _ = choose_rates_airspyhf(fs_audio)
+    assert fs_mpx / 2 > 57_000
+
+
+def test_airspyhf_48k_example():
+    fs_in, fs_mpx, d1, d2 = choose_rates_airspyhf(48_000)
+    assert fs_in == 768_000
+    assert fs_mpx == 384_000
+    assert d1 == 2
+    assert d2 == 8
+
+
+def test_airspyhf_rejects_incompatible_audio_rate():
+    with pytest.raises(ValueError, match="768000"):
+        choose_rates_airspyhf(44_100)
 
 
 if __name__ == "__main__":

@@ -3,7 +3,7 @@ live in-app controls (tune, volume, mono, load a file, ...).
 
 Two source kinds feed the same audio/scope sink:
 
-  * SDR  : RTL-SDR IQ -> FmStereoDemod -> (left, right)
+  * SDR  : RTL-SDR or Airspy HF IQ -> FmStereoDemod -> (left, right)
   * file : ffmpeg-decoded stereo PCM -> (left, right) directly
 
 A single key/render loop runs the show. Param changes that the DSP/source bake
@@ -22,10 +22,11 @@ import time
 from . import scope as scope_mod
 from .audio import AudioOutput
 from .controls import KeyReader, RepeatFilter
-from .dsp import FmStereoDemod, choose_rates
+from .dsp import FmStereoDemod, choose_rates, choose_rates_airspyhf
 from .file_source import FileSource, ffmpeg_available
 from .file_source import install_hint as ffmpeg_hint
-from .sdr import (RtlSdrSource, device_present, install_hint, tools_available)
+from .sdr import (AirspyHfSource, RtlSdrSource, backend_tools_available,
+                  detect_backend, device_present, install_hint, tools_available)
 
 
 def _term_size():
@@ -83,6 +84,33 @@ def _apply_low_power(cfg):
     cfg.sdr_block_seconds = 0.2 if cfg.low_power else 0.1
 
 
+def _plan_sdr_rates(cfg, backend):
+    if backend == "airspyhf":
+        return choose_rates_airspyhf(cfg.audio_rate)
+    return choose_rates(cfg.audio_rate, cfg.sample_rate,
+                        target_fs_in=cfg.target_fs_in)
+
+
+def _sdr_preference(cfg):
+    return getattr(cfg, "sdr_backend", "auto")
+
+
+def _gain_status(cfg):
+    if getattr(cfg, "_sdr_backend", None) == "airspyhf":
+        if cfg.gain in (None, "auto", "Auto", "AUTO"):
+            return "gain auto (AGC)"
+        att = max(0, min(8, int(round(float(cfg.gain) / 6.0))))
+        return f"gain -{att * 6}dB (att)"
+    return f"gain {cfg.gain}"
+
+
+def _sdr_rate_label(cfg):
+    fs_in = getattr(cfg, "_fs_in", 0)
+    if getattr(cfg, "_sdr_backend", None) == "airspyhf":
+        return f"Airspy HF {fs_in / 1e3:.0f}k"
+    return f"RTL {fs_in / 1e6:.3f}M"
+
+
 # --------------------------------------------------------------------------- #
 # Session: one running source + (optional) demod feeding audio/scope.
 # --------------------------------------------------------------------------- #
@@ -102,14 +130,25 @@ class _Session:
     def start(self):
         cfg = self.cfg
         if cfg.mode == "sdr":
-            fs_in, fs_mpx, d1, d2 = choose_rates(cfg.audio_rate, cfg.sample_rate,
-                                                  target_fs_in=cfg.target_fs_in)
+            backend = cfg._sdr_backend or detect_backend(_sdr_preference(cfg))
+            if backend is None:
+                raise RuntimeError("no SDR device")
+            fs_in, fs_mpx, d1, d2 = _plan_sdr_rates(cfg, backend)
+            cfg._sdr_backend = backend
+            cfg._fs_in = fs_in
+            cfg._fs_mpx = fs_mpx
             self.demod = FmStereoDemod(fs_in, fs_mpx, d1, d2, cfg.audio_rate,
                                        deemphasis_us=cfg.deemphasis,
                                        stereo=not cfg.mono, volume=cfg.volume)
-            self.source = RtlSdrSource(int(cfg.freq * 1e6), fs_in, gain=cfg.gain,
-                                       ppm=cfg.ppm, block_seconds=cfg.sdr_block_seconds,
-                                       device_index=cfg.device_index)
+            if backend == "airspyhf":
+                self.source = AirspyHfSource(int(cfg.freq * 1e6), fs_in,
+                                             gain=cfg.gain,
+                                             block_seconds=cfg.sdr_block_seconds)
+            else:
+                self.source = RtlSdrSource(int(cfg.freq * 1e6), fs_in,
+                                           gain=cfg.gain, ppm=cfg.ppm,
+                                           block_seconds=cfg.sdr_block_seconds,
+                                           device_index=cfg.device_index)
         else:
             self.demod = None
             self.source = FileSource(cfg.input_file, cfg.audio_rate,
@@ -241,6 +280,8 @@ def _handle_sdr_key(key, cfg, keys):
                 return None, "bad gain"
         return "restart", f"gain {cfg.gain}"
     if key == "p":
+        if getattr(cfg, "_sdr_backend", None) == "airspyhf":
+            return None, "ppm N/A on Airspy HF"
         val = keys.read_line(f"ppm correction [{cfg.ppm}]: ")
         try:
             cfg.ppm = int(val.strip())
@@ -321,7 +362,7 @@ def _open_file(cfg, keys):
 
 def _open_sdr(cfg, keys):
     if not tools_available():
-        return None, "rtl_sdr not installed"
+        return None, "SDR tools not installed"
     default = cfg.freq or cfg.default_freq
     f = _parse_freq(keys.read_line(f"Tune SDR to MHz [{default:.1f}]: "))
     if f is None:
@@ -339,11 +380,11 @@ def _status_lines(cfg, session, audio, waiting_sdr, status_msg, skipped_frames=0
     if cfg.mode == "sdr":
         deemph = f"{cfg.deemphasis}us" if cfg.deemphasis else "off"
         top = (f"  oscope-me  {cfg.freq:.1f} MHz | "
-               f"SDR {cfg._fs_in / 1e6:.3f}M -> MPX {cfg._fs_mpx / 1e3:.0f}k "
+               f"{_sdr_rate_label(cfg)} -> MPX {cfg._fs_mpx / 1e3:.0f}k "
                f"-> audio {cfg.audio_rate / 1e3:.1f}k | de-emph {deemph} "
-               f"| gain {cfg.gain}")
+               f"| {_gain_status(cfg)}")
         if waiting_sdr:
-            state = "waiting for RTL-SDR…"
+            state = "waiting for SDR…"
         elif session and session.demod is not None and session.demod.pilot_present:
             state = "STEREO ●"
         else:
@@ -468,7 +509,17 @@ def _engine(cfg, audio, scope, keys):
                 if cfg.mode == "sdr":
                     if now - last_devcheck >= 1.0:
                         last_devcheck = now
-                        if device_present():
+                        pref = _sdr_preference(cfg)
+                        backend = detect_backend(pref)
+                        if backend is not None:
+                            cfg._sdr_backend = backend
+                            try:
+                                cfg._fs_in, cfg._fs_mpx, _, _ = _plan_sdr_rates(
+                                    cfg, backend)
+                            except ValueError as e:
+                                status_msg = f"error: {e}"
+                                waiting_sdr = True
+                                continue
                             waiting_sdr = False
                             session = _Session(cfg, audio, scope)
                             session.start()
@@ -554,18 +605,37 @@ def run(cfg):
             print(f"file not found: {cfg.input_file}", file=sys.stderr)
             return 2
     else:
-        if not tools_available():
+        pref = _sdr_preference(cfg)
+        if pref != "auto":
+            if not backend_tools_available(pref):
+                print(install_hint(), file=sys.stderr)
+                return 2
+        elif not tools_available():
             print(install_hint(), file=sys.stderr)
             return 2
 
-    # Validate / precompute SDR rates up front (also used in the status bar).
-    try:
-        cfg._fs_in, cfg._fs_mpx, _, _ = choose_rates(cfg.audio_rate,
-                                                     cfg.sample_rate,
-                                                     target_fs_in=cfg.target_fs_in)
-    except ValueError as e:
-        print(str(e), file=sys.stderr)
-        return 2
+    # Precompute SDR rates when possible (also used in the status bar).
+    if cfg.mode == "sdr":
+        pref = _sdr_preference(cfg)
+        backend = detect_backend(pref) if pref == "auto" else pref
+        if backend is None and pref != "auto":
+            backend = pref
+        try:
+            if backend == "airspyhf":
+                cfg._fs_in, cfg._fs_mpx, _, _ = choose_rates_airspyhf(
+                    cfg.audio_rate)
+            elif backend == "rtl":
+                cfg._fs_in, cfg._fs_mpx, _, _ = choose_rates(
+                    cfg.audio_rate, cfg.sample_rate,
+                    target_fs_in=cfg.target_fs_in)
+            else:
+                cfg._fs_in, cfg._fs_mpx, _, _ = choose_rates(
+                    cfg.audio_rate, cfg.sample_rate,
+                    target_fs_in=cfg.target_fs_in)
+            cfg._sdr_backend = backend if backend in ("rtl", "airspyhf") else None
+        except ValueError as e:
+            print(str(e), file=sys.stderr)
+            return 2
 
     # Ask for a starting frequency if we're on the SDR and weren't told one.
     if cfg.mode == "sdr" and cfg.freq is None:

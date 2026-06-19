@@ -1,7 +1,8 @@
 # oscope-me
 
-Tune an FM stereo broadcast with an RTL-SDR — **or play an audio file** — and
-send it to an **X/Y oscilloscope** as oscilloscope music. A terminal app: pick a
+Tune an FM stereo broadcast with an RTL-SDR or **Airspy HF+ / HF Discovery** —
+**or play an audio file** — and send it to an **X/Y oscilloscope** as oscilloscope
+music. A terminal app: pick a
 station (or a file), and it streams stereo audio to your headphone/line out while
 drawing a live X/Y preview in the terminal. Tune, change volume, swap files, and
 flip options live from the keyboard.
@@ -16,7 +17,7 @@ drawn by the *difference* between the channels, so the app does a proper FM
 stereo multiplex decode:
 
 ```
-RTL-SDR IQ ─▶ decimate ─▶ FM discriminator ─▶ MPX baseband
+SDR IQ (RTL-SDR or Airspy HF) ─▶ decimate ─▶ FM discriminator ─▶ MPX baseband
    ├─ lowpass 15 kHz ─────────────────────────▶ mono (L+R)
    └─ 19 kHz pilot ─(square)─▶ 38 kHz carrier ─▶ coherent decode ─▶ (L−R)
                                                   L = mono + (L−R)
@@ -34,12 +35,22 @@ figures come through clean.
 
 ## Install
 
-You need the `rtl-sdr` command-line tools (for the `rtl_sdr` / `rtl_test`
-binaries) and Python 3.10+.
+You need SDR command-line tools for at least one supported backend and Python
+3.10+:
+
+| Backend | Tools | Install |
+|---------|-------|---------|
+| RTL-SDR | `rtl_sdr`, `rtl_test` | `brew install librtlsdr` / `apt install rtl-sdr` |
+| Airspy HF+ / HF Discovery | `airspyhf_rx`, `airspyhf_info` | `brew install airspyhf` / `apt install airspyhf` |
+
+With **no device plugged in**, the app waits. When both an Airspy HF and an
+RTL-SDR are connected, **Airspy is preferred** automatically. Override with
+`--sdr-backend rtl` or `--sdr-backend airspyhf`.
 
 **macOS (Apple Silicon or Intel):**
 ```bash
-brew install librtlsdr            # provides rtl_sdr, rtl_test, ...
+brew install librtlsdr            # RTL-SDR: rtl_sdr, rtl_test, ...
+brew install airspyhf             # Airspy HF+: airspyhf_rx, airspyhf_info, ...
 git clone <this repo> && cd oscope-me
 python3 -m venv .venv && source .venv/bin/activate
 pip install -e .
@@ -47,7 +58,7 @@ pip install -e .
 
 **Linux (Debian/Ubuntu):**
 ```bash
-sudo apt install rtl-sdr librtlsdr-dev libportaudio2 make python3.14-venv pulseaudio ffmpeg
+sudo apt install rtl-sdr librtlsdr-dev airspyhf libportaudio2 make python3.14-venv pulseaudio ffmpeg
 git clone <this repo> && cd oscope-me
 make venv
 make run
@@ -60,10 +71,17 @@ Override the sound card if needed: `make run ALSA_CARD=1`.
 Use `alsamixer` to control volume. To persist auto-mute disabled across reboots:
 `sudo alsactl store` (after disabling Auto-Mute Mode manually once).
 
-On Linux you may need a udev rule so the SDR is usable without root, and to
-blacklist the DVB-T kernel driver:
+On Linux you may need udev rules so the SDR is usable without root. For
+RTL-SDR, blacklist the DVB-T kernel driver:
 ```bash
 echo 'blacklist dvb_usb_rtl28xxu' | sudo tee /etc/modprobe.d/blacklist-rtl.conf
+```
+
+For Airspy HF+, ensure your user is in the `plugdev` group (the `airspyhf`
+package installs udev rules on Debian/Ubuntu):
+```bash
+sudo usermod -a -G plugdev "$USER"   # log out and back in
+airspyhf_info                          # should list the receiver
 ```
 
 ## Usage
@@ -77,14 +95,18 @@ oscope-me -f 102.5 --no-scope     # audio only, no terminal preview
 oscope-me --list-audio            # list output devices
 oscope-me -f 102.5 --audio-device "External Headphones"
 oscope-me -f 102.5 --audio-rate 192000   # high-rate output for the DAC
+oscope-me -f 102.5 --sdr-backend airspyhf   # force Airspy HF+
+oscope-me -f 102.5 --sdr-backend rtl        # force RTL-SDR
 ```
 
-In **SDR mode** it waits for an RTL-SDR to be plugged in, asks for a frequency
-(or uses `--default-freq`), then streams. In **file mode** (`-i FILE`) it decodes
-the file with ffmpeg and plays it straight to X/Y (oscilloscope-music files are
-already stereo, so no FM decode is needed); it loops by default. Either way, plug
-headphones / a line-out cable in and the audio follows your system default
-output. Ctrl-C (or `q`) to quit.
+In **SDR mode** it waits for a supported receiver (Airspy HF or RTL-SDR), asks
+for a frequency (or uses `--default-freq`), then streams. Airspy HF uses a fixed
+768 kS/s IQ rate; FM tuning (88–108 MHz) is within its 60–260 MHz VHF range.
+Use `--audio-rate 48000` or `96000` with Airspy HF (44100 Hz is not compatible
+with the fixed 768 kS/s decimation plan). In **file mode** (`-i FILE`) it decodes the file with ffmpeg and plays it straight
+to X/Y (oscilloscope-music files are already stereo, so no FM decode is needed);
+it loops by default. Either way, plug headphones / a line-out cable in and the
+audio follows your system default output. Ctrl-C (or `q`) to quit.
 
 ### Live controls
 
@@ -137,7 +159,8 @@ Start with the scope's X and Y gains roughly equal, then trim to taste.
 | `--audio-rate Hz` | Output sample rate: 48000 (default), 96000, 192000. |
 | `--deemphasis` | `75` (Americas, default), `50` (Europe), or `off`. |
 | `--mono` | Force mono — collapses the X/Y image to a diagonal line. |
-| `-p, --ppm` | Tuner frequency correction in ppm. |
+| `-p, --ppm` | Tuner frequency correction in ppm (RTL-SDR only). |
+| `--sdr-backend` | `auto` (default, prefer Airspy HF), `rtl`, or `airspyhf`. |
 | `--no-scope` | Skip the terminal preview (audio only). |
 | `--low-power` | Reduce CPU: lower FPS, smaller buffers, lower SDR rate. |
 | `--volume` | Output level multiplier (default 0.02). |
@@ -191,9 +214,10 @@ preview entirely (audio only). Increase `--audio-buffer` if you hear crackling.
 
 ## Troubleshooting
 
-- **"rtl_sdr / rtl_test not found"** — install the `rtl-sdr` tools (see above).
-- **Stuck on "Waiting for an RTL-SDR…"** — check `rtl_test` sees the device; on
-  Linux make sure the DVB-T driver is blacklisted and udev permissions are set.
+- **"No SDR tools found"** — install `rtl-sdr` and/or `airspyhf` (see above).
+- **Stuck on "Waiting for SDR…"** — run `airspyhf_info` or `rtl_test` to confirm
+  the device is visible; on Linux check udev/`plugdev` (Airspy) and the RTL
+  DVB-T driver blacklist.
 - **`mono ○` instead of `STEREO ●`** — the station has no 19 kHz pilot or the
   signal is weak. Try a stronger station, a better antenna, or set `-g` manually.
 - **Crackling / `underruns` climbing** — increase `--audio-buffer` (e.g. `2.0`).
@@ -216,7 +240,8 @@ python tests/test_dsp.py   # synthesises an FM stereo signal and checks separati
 ## Requirements
 
 - Python 3.10+ with `numpy`, `scipy`, `sounddevice` (installed via `pip install -e .`)
-- For **SDR mode**: the `rtl-sdr` CLI tools and an RTL2832U-based SDR (e.g. NooElec
-  NESDR, RTL-SDR Blog v3/v4)
+- For **SDR mode**: CLI tools for at least one backend — **RTL-SDR**
+  (`rtl-sdr` package + RTL2832U dongle) or **Airspy HF+ / HF Discovery**
+  (`airspyhf` package). Auto-detect prefers Airspy when both are plugged in.
 - For **file mode**: `ffmpeg` (`brew install ffmpeg` / `apt install ffmpeg`) — only
   needed if you use `-i`
